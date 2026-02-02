@@ -1,0 +1,35 @@
+{
+  "name": "@dwizi/create-dzx",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dwizi/create-dzx.git",
+    "directory": "packages/create-dzx"
+  },
+  "bugs": {
+    "url": "https://github.com/dwizi/create-dzx/issues"
+  },
+  "bin": {
+    "create-dzx": "./bin/index.js"
+  },
+  "files": [
+    "bin",
+    "templates"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
