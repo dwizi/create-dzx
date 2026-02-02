@@ -49,3 +49,24 @@ if (fs.existsSync(createDzxTemplatesDir)) {
 copyDir(dzxTemplatesDir, createDzxTemplatesDir);
 
 console.log("Templates copied successfully");
+
+/**
+ * Update the copied templates to pin the current @dwizi/dzx version.
+ */
+function updateTemplateDependency(templateName, version) {
+  const templatePackagePath = path.resolve(createDzxTemplatesDir, templateName, "package.json");
+  if (!fs.existsSync(templatePackagePath)) return;
+  const contents = fs.readFileSync(templatePackagePath, "utf8");
+  const pkg = JSON.parse(contents);
+  pkg.dependencies = pkg.dependencies ?? {};
+  pkg.dependencies["@dwizi/dzx"] = `^${version}`;
+  fs.writeFileSync(templatePackagePath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
+const dzxPackagePath = path.resolve(rootDir, "dzx", "package.json");
+const dzxPackage = JSON.parse(fs.readFileSync(dzxPackagePath, "utf8"));
+const dzxVersion = dzxPackage.version;
+const templateNames = ["basic", "tools-only", "full"];
+for (const name of templateNames) {
+  updateTemplateDependency(name, dzxVersion);
+}
