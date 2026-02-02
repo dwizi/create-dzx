@@ -5,13 +5,13 @@ Scaffold a new dzx MCP server project.
 ## Usage
 
 ```bash
-npx create-dzx
+npx @dwizi/create-dzx
 ```
 
 Or with options:
 
 ```bash
-npx create-dzx my-agent --template basic --runtime node
+npx @dwizi/create-dzx my-agent --template basic --runtime node
 ```
 
 ## Options
