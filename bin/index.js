@@ -253,14 +253,17 @@ function printKeyValueList(items) {
  */
 async function getDzxVersion() {
   try {
-    const { promisify } = await import("node:util");
-    const { exec } = promisify(await import("node:child_process"));
-    const { stdout } = await exec("npm view @dwizi/dzx version", { encoding: "utf8" });
-    return stdout.trim();
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    const dzxPkgJsonPath = require.resolve("@dwizi/dzx/package.json", { paths: [process.cwd()] });
+    const dzxPkg = JSON.parse(fs.readFileSync(dzxPkgJsonPath, "utf8"));
+    if (dzxPkg && typeof dzxPkg.version === "string" && dzxPkg.version.trim()) {
+      return dzxPkg.version.trim();
+    }
   } catch {
-    // Fallback version if npm query fails
-    return "latest";
   }
+  // Fallback version if we cannot resolve an installed @dwizi/dzx
+  return "*";
 }
 
 /**
