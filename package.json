@@ -35,6 +35,6 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@dwizi/dzx": "^0.1.5"
+    "@dwizi/dzx": "*"
   }
 }
