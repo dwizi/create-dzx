@@ -1,6 +1,6 @@
 {
   "name": "@dwizi/create-dzx",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "license": "MIT",
   "publishConfig": {
@@ -32,5 +32,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "devDependencies": {
+    "@dwizi/dzx": "^0.1.5"
   }
 }

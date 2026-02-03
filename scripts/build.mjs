@@ -6,9 +6,25 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const rootDir = path.resolve(__dirname, "../..");
-const dzxTemplatesDir = path.resolve(rootDir, "dzx/templates");
 const createDzxDir = path.resolve(__dirname, "..");
 const createDzxTemplatesDir = path.resolve(createDzxDir, "templates");
+
+// Try to locate dzx/templates in monorepo sibling or node_modules
+const monorepoTemplatesDir = path.resolve(rootDir, "dzx/templates");
+const nodeModulesTemplatesDir = path.resolve(createDzxDir, "node_modules/@dwizi/dzx/templates");
+
+let dzxTemplatesDir = monorepoTemplatesDir;
+if (!fs.existsSync(dzxTemplatesDir)) {
+  if (fs.existsSync(nodeModulesTemplatesDir)) {
+    dzxTemplatesDir = nodeModulesTemplatesDir;
+    console.log(`Using templates from node_modules: ${dzxTemplatesDir}`);
+  } else {
+    console.error(`Error: Templates directory not found in ${monorepoTemplatesDir} or ${nodeModulesTemplatesDir}`);
+    process.exit(1);
+  }
+} else {
+  console.log(`Using templates from monorepo: ${dzxTemplatesDir}`);
+}
 
 /**
  * Copy a directory recursively.
@@ -30,12 +46,6 @@ function copyDir(src, dest) {
 // Ensure templates directory exists
 if (!fs.existsSync(createDzxTemplatesDir)) {
   fs.mkdirSync(createDzxTemplatesDir, { recursive: true });
-}
-
-// Copy templates from dzx package
-if (!fs.existsSync(dzxTemplatesDir)) {
-  console.error(`Error: Templates directory not found: ${dzxTemplatesDir}`);
-  process.exit(1);
 }
 
 console.log(`Copying templates from ${dzxTemplatesDir} to ${createDzxTemplatesDir}`);
@@ -63,7 +73,16 @@ function updateTemplateDependency(templateName, version) {
   fs.writeFileSync(templatePackagePath, JSON.stringify(pkg, null, 2) + "\n");
 }
 
-const dzxPackagePath = path.resolve(rootDir, "dzx", "package.json");
+let dzxPackagePath = path.resolve(rootDir, "dzx", "package.json");
+if (!fs.existsSync(dzxPackagePath)) {
+  dzxPackagePath = path.resolve(createDzxDir, "node_modules/@dwizi/dzx/package.json");
+}
+
+if (!fs.existsSync(dzxPackagePath)) {
+   console.error(`Error: dzx package.json not found at ${dzxPackagePath}`);
+   process.exit(1);
+}
+
 const dzxPackage = JSON.parse(fs.readFileSync(dzxPackagePath, "utf8"));
 const dzxVersion = dzxPackage.version;
 const templateNames = ["basic", "tools-only", "full"];
