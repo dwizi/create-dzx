@@ -26,5 +26,5 @@ jobs:
 
       - run: pnpm install
       - run: pnpm run build --if-present
-      - run: pnpm test
+      - run: pnpm run test --if-present
       - run: pnpm publish --no-git-checks --provenance --access public
