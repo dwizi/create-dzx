@@ -1,6 +1,6 @@
 {
   "name": "@dwizi/create-dzx",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "type": "module",
   "license": "MIT",
   "publishConfig": {
@@ -24,6 +24,9 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "lint": "biome check .",
+    "format": "biome format .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.mjs",
     "prepublishOnly": "pnpm build",
     "fix:lockfile": "pnpm install --lockfile-only --ignore-workspace"
@@ -35,6 +38,10 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@dwizi/dzx": "*"
+    "@biomejs/biome": "^2.3.13",
+    "@dwizi/dzx": "*",
+    "@types/node": "^25.1.0",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.9.3"
   }
 }

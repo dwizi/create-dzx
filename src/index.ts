@@ -1,15 +1,33 @@
-#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as clack from "@clack/prompts";
+
 const TEMPLATES = ["basic", "tools-only", "full"];
 const RUNTIMES = ["node", "deno"];
+
+/**
+ * Normalize a string into a filesystem-safe slug.
+ */
 function slugify(value) {
-  return value.toLowerCase().replace(/[^a-z0-9-_]/g, "-").replace(/--+/g, "-").replace(/^-+/, "").replace(/-+$/, "");
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, "-")
+    .replace(/--+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
 }
-function parseArgs(argv) {
-  const args = { positional: [] };
+
+/**
+ * Parse CLI argv into a simple key/value map.
+ */
+type ParsedArgs = {
+  positional: string[];
+  [key: string]: string | boolean | string[];
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = { positional: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (!arg.startsWith("--")) {
@@ -27,13 +45,23 @@ function parseArgs(argv) {
   }
   return args;
 }
+
+/**
+ * Return true when the directory is missing or empty.
+ */
 function isEmptyDir(dir) {
   if (!fs.existsSync(dir)) return true;
   return fs.readdirSync(dir).length === 0;
 }
+
+/**
+ * Recursively list files relative to the base directory.
+ */
 function listFiles(dir, baseDir = dir) {
   if (!fs.existsSync(dir)) return [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  const entries = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name));
   const files = [];
   for (const entry of entries) {
     const entryPath = path.join(dir, entry.name);
@@ -45,6 +73,10 @@ function listFiles(dir, baseDir = dir) {
   }
   return files;
 }
+
+/**
+ * Copy a directory recursively.
+ */
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
@@ -58,18 +90,25 @@ function copyDir(src, dest) {
     }
   }
 }
+
+/**
+ * Detect package manager from lockfiles or environment.
+ */
 function detectPackageManager(cwd) {
   const lockfiles = {
     "pnpm-lock.yaml": "pnpm",
     "package-lock.json": "npm",
     "yarn.lock": "yarn",
-    "bun.lockb": "bun"
+    "bun.lockb": "bun",
   };
+
   for (const [lockfile, pm] of Object.entries(lockfiles)) {
     if (fs.existsSync(path.join(cwd, lockfile))) {
       return pm;
     }
   }
+
+  // Check parent directories (monorepo context)
   let current = cwd;
   for (let i = 0; i < 5; i++) {
     const parent = path.dirname(current);
@@ -81,19 +120,33 @@ function detectPackageManager(cwd) {
     }
     current = parent;
   }
+
+  // Default to pnpm
   return "pnpm";
 }
+
+/**
+ * Get install command for a package manager.
+ */
 function getInstallCommand(pm) {
   return `${pm} install`;
 }
+
+/**
+ * Get run command for a package manager script.
+ */
 function getRunCommand(pm, script) {
   if (pm === "pnpm" || pm === "yarn") return `${pm} ${script}`;
   if (pm === "bun") return `${pm} run ${script}`;
   return `${pm} run ${script}`;
 }
-async function runCommand(command, cwd) {
+
+/**
+ * Run a shell command in a given working directory.
+ */
+async function runCommand(command: string, cwd: string) {
   const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn(command, { cwd, stdio: "inherit", shell: true });
     child.on("error", (err) => reject(err));
     child.on("exit", (code) => {
@@ -102,101 +155,139 @@ async function runCommand(command, cwd) {
     });
   });
 }
+
+/**
+ * Resolve the templates directory for create-dzx.
+ */
 function resolveTemplatesRoot() {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const localTemplatesRoot = path.resolve(here, "..", "templates");
   if (fs.existsSync(localTemplatesRoot)) return localTemplatesRoot;
+  // Fallback for when installed as npm package
   return path.resolve(process.cwd(), "node_modules", "create-dzx", "templates");
 }
+
+/**
+ * Color utilities for terminal output.
+ */
 const useColor = Boolean(process.stdout.isTTY);
 function color(code) {
-  return (text) => useColor ? `\x1B[${code}m${text}\x1B[0m` : text;
+  return (text) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
 }
+
 const colorize = {
   green: color("32"),
   cyan: color("36"),
   blue: color("34"),
   gray: color("90"),
   bold: color("1"),
-  dim: color("2")
+  dim: color("2"),
 };
+
 const symbols = {
-  check: useColor ? "\u2714" : "OK",
-  step: useColor ? "\u25CF" : "*",
-  brand: useColor ? "\u25B2" : ">"
+  check: useColor ? "✔" : "OK",
+  step: useColor ? "●" : "*",
+  brand: useColor ? "▲" : ">",
 };
+
+/**
+ * Create a terminal spinner controller.
+ */
 function createSpinner(enabled) {
-  const frames = ["\u25D0", "\u25D3", "\u25D1", "\u25D2"];
+  const frames = ["◐", "◓", "◑", "◒"];
   let timer = null;
   let message = "";
   let frameIndex = 0;
+
   const clearLine = () => {
     if (!enabled) return;
-    process.stdout.write("\r\x1B[2K");
+    process.stdout.write("\r\x1b[2K");
   };
+
   const render = () => {
     if (!enabled) return;
     const frame = frames[frameIndex % frames.length];
     frameIndex += 1;
     process.stdout.write(`\r${colorize.gray(frame)}  ${message}`);
   };
+
   const start = (nextMessage) => {
     message = nextMessage;
     if (!enabled || timer) return;
     render();
     timer = setInterval(render, 80);
   };
+
   const update = (nextMessage) => {
     message = nextMessage;
     if (!enabled || !timer) return;
     render();
   };
+
   const pause = () => {
     if (!enabled || !timer) return;
     clearInterval(timer);
     timer = null;
     clearLine();
   };
+
   const resume = () => {
     if (!enabled || timer || !message) return;
     render();
     timer = setInterval(render, 80);
   };
+
   const stop = () => {
     pause();
     message = "";
   };
+
   return { start, update, pause, resume, stop, isEnabled: enabled };
 }
+
+/**
+ * Print a aligned key/value summary list.
+ */
 function printKeyValueList(items) {
   if (items.length === 0) return;
   const maxLabel = items.reduce((max, item) => Math.max(max, item.label.length), 0);
   for (const item of items) {
     const padded = item.label.padEnd(maxLabel);
+    // biome-ignore: lint/suspicious/noConsole
     console.log(
-      `${colorize.gray(symbols.step)} ${colorize.gray(padded)} : ${colorize.cyan(item.value)}`
+      `${colorize.gray(symbols.step)} ${colorize.gray(padded)} : ${colorize.cyan(item.value)}`,
     );
   }
 }
+
+/**
+ * Get the latest version of @dwizi/dzx from npm registry.
+ */
 async function getDzxVersion() {
   try {
     const { createRequire } = await import("node:module");
-    const require2 = createRequire(import.meta.url);
-    const dzxPkgJsonPath = require2.resolve("@dwizi/dzx/package.json", { paths: [process.cwd()] });
+    const require = createRequire(import.meta.url);
+    const dzxPkgJsonPath = require.resolve("@dwizi/dzx/package.json", { paths: [process.cwd()] });
     const dzxPkg = JSON.parse(fs.readFileSync(dzxPkgJsonPath, "utf8"));
     if (dzxPkg && typeof dzxPkg.version === "string" && dzxPkg.version.trim()) {
       return dzxPkg.version.trim();
     }
-  } catch {
-  }
+  } catch {}
+  // Fallback version if we cannot resolve an installed @dwizi/dzx
   return "*";
 }
+
+/**
+ * Main scaffolding function.
+ */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const force = args.force === true;
   const isYes = args.yes === true;
-  const shouldInstall = args.install === true ? true : args["no-install"] === true ? false : true;
+  const shouldInstall = args.install === true ? true : args["no-install"] !== true;
+
   if (args.help === true || args.h === true) {
+    // biome-ignore: lint/suspicious/noConsole
     console.log(`
 ${colorize.blue(symbols.brand)} ${colorize.bold("create-dzx")}
 
@@ -213,14 +304,17 @@ ${colorize.bold("Options")}
 `);
     return;
   }
+
   clack.intro("create-dzx");
+
   const dirArg = typeof args.dir === "string" ? args.dir : args.positional[0];
   const defaultDir = "my-agent";
+
   let targetDir = path.resolve(process.cwd(), dirArg || defaultDir);
   if (!isYes) {
     const dirResponse = await clack.text({
       message: "Project directory",
-      initialValue: dirArg || defaultDir
+      initialValue: dirArg || defaultDir,
     });
     if (clack.isCancel(dirResponse)) {
       clack.cancel("Aborted.");
@@ -228,16 +322,17 @@ ${colorize.bold("Options")}
     }
     targetDir = path.resolve(process.cwd(), dirResponse || defaultDir);
   }
-  let template = typeof args.template === "string" ? args.template : isYes ? "basic" : void 0;
+
+  let template = typeof args.template === "string" ? args.template : isYes ? "basic" : undefined;
   if (!template) {
     const templateResponse = await clack.select({
       message: "Template",
       options: [
         { value: "basic", label: "basic" },
         { value: "tools-only", label: "tools-only" },
-        { value: "full", label: "full" }
+        { value: "full", label: "full" },
       ],
-      initialValue: "basic"
+      initialValue: "basic",
     });
     if (clack.isCancel(templateResponse)) {
       clack.cancel("Aborted.");
@@ -245,15 +340,16 @@ ${colorize.bold("Options")}
     }
     template = templateResponse;
   }
-  let runtime = typeof args.runtime === "string" ? args.runtime : isYes ? "node" : void 0;
+
+  let runtime = typeof args.runtime === "string" ? args.runtime : isYes ? "node" : undefined;
   if (!runtime) {
     const runtimeResponse = await clack.select({
       message: "Runtime",
       options: [
         { value: "node", label: "node" },
-        { value: "deno", label: "deno" }
+        { value: "deno", label: "deno" },
       ],
-      initialValue: "node"
+      initialValue: "node",
     });
     if (clack.isCancel(runtimeResponse)) {
       clack.cancel("Aborted.");
@@ -261,57 +357,67 @@ ${colorize.bold("Options")}
     }
     runtime = runtimeResponse;
   }
+
   template = template ?? "basic";
   runtime = runtime ?? "node";
+
   if (!TEMPLATES.includes(template)) {
     throw new Error(`Unknown template: ${template}`);
   }
   if (!RUNTIMES.includes(runtime)) {
     throw new Error(`Unknown runtime: ${runtime}`);
   }
+
   if (!force && !isEmptyDir(targetDir)) {
     throw new Error(`Target directory is not empty: ${targetDir}. Use --force to overwrite.`);
   }
+
   const templatesRoot = resolveTemplatesRoot();
   const templateDir = path.join(templatesRoot, template);
   if (!fs.existsSync(templateDir)) {
     throw new Error(`Template not found: ${template}`);
   }
+
   if (force && !isYes) {
     const confirmation = await clack.confirm({
       message: "This will overwrite existing files. Continue?",
-      initialValue: false
+      initialValue: false,
     });
     if (clack.isCancel(confirmation) || confirmation === false) {
       clack.cancel("Aborted.");
       process.exit(1);
     }
   }
+
   const spinner = createSpinner(process.stdout.isTTY);
   const stepLabels = [
     "Validating destination",
     "Copying template",
     "Configuring manifest",
-    ...shouldInstall ? ["Installing dependencies"] : [],
-    "Finalizing"
+    ...(shouldInstall ? ["Installing dependencies"] : []),
+    "Finalizing",
   ];
   const stepLabelWidth = stepLabels.reduce((max, label) => Math.max(max, label.length), 0);
   const stepTimes = [];
   let stepStart = Date.now();
   let lastStep = "";
   let spinnerStarted = false;
+
   const logStep = (label, ms) => {
     const paddedLabel = label.padEnd(stepLabelWidth);
     const paddedMs = `${ms}ms`.padStart(6);
     const line = `${colorize.cyan(symbols.step)} ${colorize.gray(paddedLabel)} ${colorize.dim(paddedMs)}`;
     if (spinner.isEnabled) {
       spinner.pause();
+      // biome-ignore: lint/suspicious/noConsole
       console.log(line);
       spinner.resume();
     } else {
+      // biome-ignore: lint/suspicious/noConsole
       console.log(line);
     }
   };
+
   const step = (message) => {
     const now = Date.now();
     if (lastStep) {
@@ -330,24 +436,31 @@ ${colorize.bold("Options")}
       }
     }
   };
+
   const dzxVersion = await getDzxVersion();
   const banner = `${colorize.blue(symbols.brand)} ${colorize.bold("create-dzx")} ${colorize.gray("scaffold")}`;
+  // biome-ignore: lint/suspicious/noConsole
   console.log(banner);
+
   step("Validating destination");
   if (!force) {
     const templateFiles = listFiles(templateDir);
     const collisions = templateFiles.filter((file) => fs.existsSync(path.join(targetDir, file)));
     if (collisions.length > 0) {
-      const preview = collisions.slice(0, 8).map((file) => `- ${file}`).join("\n");
+      const preview = collisions
+        .slice(0, 8)
+        .map((file) => `- ${file}`)
+        .join("\n");
       const suffix = collisions.length > 8 ? "\n- ..." : "";
       throw new Error(
-        `Refusing to overwrite existing files. Use --force to proceed.
-${preview}${suffix}`
+        `Refusing to overwrite existing files. Use --force to proceed.\n${preview}${suffix}`,
       );
     }
   }
+
   step("Copying template");
   copyDir(templateDir, targetDir);
+
   step("Configuring manifest");
   const manifestPath = path.join(targetDir, "mcp.json");
   if (fs.existsSync(manifestPath)) {
@@ -356,22 +469,25 @@ ${preview}${suffix}`
     manifest.runtime = runtime;
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   }
+
+  // Update package.json with correct @dwizi/dzx version
   const pkgPath = path.join(targetDir, "package.json");
   if (fs.existsSync(pkgPath)) {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-    if (pkg.dependencies && pkg.dependencies["@dwizi/dzx"]) {
+    if (pkg.dependencies?.["@dwizi/dzx"] === "string") {
       pkg.dependencies["@dwizi/dzx"] = `^${dzxVersion}`;
-      fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+      fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
     }
   }
+
   if (shouldInstall) {
     step("Installing dependencies");
     if (!fs.existsSync(pkgPath)) {
       if (spinner.isEnabled) spinner.stop();
       throw new Error("Missing package.json in template. Cannot install dependencies.");
     }
-    const pm2 = detectPackageManager(targetDir);
-    const installCommand = getInstallCommand(pm2);
+    const pm = detectPackageManager(targetDir);
+    const installCommand = getInstallCommand(pm);
     try {
       await runCommand(installCommand, targetDir);
     } catch {
@@ -379,6 +495,7 @@ ${preview}${suffix}`
       throw new Error(`Dependency installation failed. Run \`${installCommand}\` manually.`);
     }
   }
+
   step("Finalizing");
   if (lastStep) {
     const ms = Date.now() - stepStart;
@@ -386,15 +503,18 @@ ${preview}${suffix}`
     logStep(lastStep, ms);
   }
   spinner.stop();
+
   const totalMs = stepTimes.reduce((sum, item) => sum + item.ms, 0);
   const summaryLines = [
     { label: "dir", value: targetDir },
     { label: "template", value: template },
     { label: "runtime", value: runtime },
     { label: "install", value: shouldInstall ? "yes" : "no" },
-    { label: "ready", value: `${totalMs}ms` }
+    { label: "ready", value: `${totalMs}ms` },
   ];
+  // biome-ignore: lint/suspicious/noConsole
   console.log("");
+  // biome-ignore: lint/suspicious/noConsole
   console.log(`${colorize.green(symbols.check)} ${colorize.bold("Project ready")}`);
   printKeyValueList(summaryLines);
   const pm = shouldInstall ? detectPackageManager(targetDir) : "pnpm";
@@ -402,11 +522,14 @@ ${preview}${suffix}`
   const nextSteps = [
     `cd ${path.basename(targetDir)}`,
     shouldInstall ? runCommand2 : `${pm} install`,
-    shouldInstall ? "" : runCommand2
+    shouldInstall ? "" : runCommand2,
   ].filter(Boolean);
+  // biome-ignore: lint/suspicious/noConsole
   console.log(`${colorize.gray("next")} ${colorize.cyan(nextSteps.join(" && "))}`);
 }
+
 main().catch((err) => {
+  // biome-ignore: lint/suspicious/noConsole
   console.error(err);
   process.exit(1);
 });

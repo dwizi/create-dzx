@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import esbuild from "esbuild";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,6 +9,9 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "../..");
 const createDzxDir = path.resolve(__dirname, "..");
 const createDzxTemplatesDir = path.resolve(createDzxDir, "templates");
+const srcEntry = path.resolve(createDzxDir, "src/index.ts");
+const binOutput = path.resolve(createDzxDir, "bin/index.js");
+const binDir = path.dirname(binOutput);
 
 // Try to locate dzx/templates in monorepo sibling or node_modules
 const monorepoTemplatesDir = path.resolve(rootDir, "dzx/templates");
@@ -19,7 +23,9 @@ if (!fs.existsSync(dzxTemplatesDir)) {
     dzxTemplatesDir = nodeModulesTemplatesDir;
     console.log(`Using templates from node_modules: ${dzxTemplatesDir}`);
   } else {
-    console.error(`Error: Templates directory not found in ${monorepoTemplatesDir} or ${nodeModulesTemplatesDir}`);
+    console.error(
+      `Error: Templates directory not found in ${monorepoTemplatesDir} or ${nodeModulesTemplatesDir}`,
+    );
     process.exit(1);
   }
 } else {
@@ -42,6 +48,20 @@ function copyDir(src, dest) {
     }
   }
 }
+
+fs.mkdirSync(binDir, { recursive: true });
+await esbuild.build({
+  entryPoints: [srcEntry],
+  outfile: binOutput,
+  bundle: false,
+  platform: "node",
+  format: "esm",
+  target: "node24",
+  banner: {
+    js: "#!/usr/bin/env node",
+  },
+});
+fs.chmodSync(binOutput, 0o755);
 
 // Ensure templates directory exists
 if (!fs.existsSync(createDzxTemplatesDir)) {
@@ -70,7 +90,7 @@ function updateTemplateDependency(templateName, version) {
   const pkg = JSON.parse(contents);
   pkg.dependencies = pkg.dependencies ?? {};
   pkg.dependencies["@dwizi/dzx"] = `^${version}`;
-  fs.writeFileSync(templatePackagePath, JSON.stringify(pkg, null, 2) + "\n");
+  fs.writeFileSync(templatePackagePath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
 let dzxPackagePath = path.resolve(rootDir, "dzx", "package.json");
@@ -79,8 +99,8 @@ if (!fs.existsSync(dzxPackagePath)) {
 }
 
 if (!fs.existsSync(dzxPackagePath)) {
-   console.error(`Error: dzx package.json not found at ${dzxPackagePath}`);
-   process.exit(1);
+  console.error(`Error: dzx package.json not found at ${dzxPackagePath}`);
+  process.exit(1);
 }
 
 const dzxPackage = JSON.parse(fs.readFileSync(dzxPackagePath, "utf8"));
